@@ -1,0 +1,5 @@
+code/build/
+.DS_Store
+archiv/
+Tokenkosten.md
+__pycache__/
