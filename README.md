@@ -85,9 +85,12 @@ SessionAmpel --focus <id>      # Terminalfenster der Session nach vorn holen
 
 ## Installation
 
-Das Ganze ist ein Einzelstück ohne Installationsprogramm, vier Handgriffe:
+Es gibt kein Installationsprogramm. Fünf Schritte von Hand, zehn Minuten.
 
-**1. Holen und bauen**
+**Voraussetzungen:** macOS, Claude Code, Python 3 und die Xcode Command Line
+Tools für den Swift-Übersetzer (`xcode-select --install`).
+
+### 1. Holen und bauen
 
 ```bash
 git clone https://github.com/JudithFried/claude-verlaufsanzeige.git
@@ -96,46 +99,81 @@ mkdir -p code/build
 swiftc -O -o code/build/SessionAmpel code/SessionAmpel.swift
 ```
 
-**2. Hook verknüpfen**
+Der letzte Befehl braucht einen Moment und sagt nichts, wenn er geklappt hat.
+
+### 2. Gleich ausprobieren
+
+Noch ohne Autostart, einfach starten:
+
+```bash
+./code/build/SessionAmpel
+```
+
+Unter der Menüleiste erscheint ein schmales Band. Solange keine Claude-Session
+läuft, ist es leer, das ist richtig so. Mit `Strg-C` im Terminal wieder beenden.
+
+### 3. Hook verknüpfen
+
+Der Hook ist das Teil, das Claude Code bei jedem Ereignis aufruft und den
+Zustand der Session aufschreibt.
 
 ```bash
 mkdir -p ~/.claude/hooks
 ln -s "$PWD/code/ampel_hook.py" ~/.claude/hooks/session-ampel.py
 ```
 
-**3. Hooks eintragen**
+### 4. Hooks eintragen
 
-Vorher eine Sicherungskopie anlegen, in `~/.claude/settings.json` stehen
-womöglich schon eigene Hooks. Die dürfen nicht verlorengehen, der neue Eintrag
-kommt zu den vorhandenen dazu:
+Jetzt muss Claude Code erfahren, dass es den Hook aufrufen soll. Das steht in
+`~/.claude/settings.json`.
 
-```bash
-cp ~/.claude/settings.json ~/.claude/settings.json.sicherung
-```
+> **Achtung:** In dieser Datei stehen womöglich schon eigene Hooks. Die neuen
+> Einträge kommen **zu den vorhandenen dazu**, sie ersetzen sie nicht. Vorher
+> eine Kopie anlegen:
+>
+> ```bash
+> cp ~/.claude/settings.json ~/.claude/settings.json.sicherung
+> ```
 
-Für jedes der sechs Ereignisse `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
-`Notification`, `Stop` und `SessionEnd` einen Eintrag nach diesem Muster
-ergänzen:
+Der Abschnitt `hooks` sieht danach so aus. Wer schon Hooks hat, fügt die
+jeweiligen Einträge in die vorhandenen Listen ein:
 
 ```json
 {
   "hooks": {
     "SessionStart": [
-      {
-        "matcher": "*",
-        "hooks": [
-          { "type": "command", "command": "python3 ~/.claude/hooks/session-ampel.py" }
-        ]
-      }
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "python3 ~/.claude/hooks/session-ampel.py" }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "python3 ~/.claude/hooks/session-ampel.py" }] }
+    ],
+    "PreToolUse": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "python3 ~/.claude/hooks/session-ampel.py" }] }
+    ],
+    "Notification": [
+      { "matcher": "", "hooks": [{ "type": "command", "command": "python3 ~/.claude/hooks/session-ampel.py" }] }
+    ],
+    "Stop": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "python3 ~/.claude/hooks/session-ampel.py" }] }
+    ],
+    "SessionEnd": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "python3 ~/.claude/hooks/session-ampel.py" }] }
     ]
   }
 }
 ```
 
-**4. Autostart einrichten**
+Die Unterschiede beim `matcher` sind kein Versehen, das ist die Form, in der es
+läuft: `UserPromptSubmit` kennt keinen, `Notification` einen leeren.
 
-`~/Library/LaunchAgents/de.session-ampel.anzeige.plist` anlegen, den Pfad zum
-gebauten Programm eintragen:
+Danach Claude Code einmal neu starten, sonst greifen die Einträge nicht. Beim
+nächsten Start einer Session erscheint ein Feld im Band.
+
+### 5. Autostart einrichten
+
+Damit die Anzeige nach dem Anmelden von selbst läuft. Datei
+`~/Library/LaunchAgents/de.session-ampel.anzeige.plist` anlegen, im Pfad den
+eigenen Projektordner eintragen:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -159,16 +197,34 @@ gebauten Programm eintragen:
 </plist>
 ```
 
-Anmelden und prüfen:
+Anmelden und alles zusammen prüfen:
 
 ```bash
 launchctl bootstrap "gui/$UID" ~/Library/LaunchAgents/de.session-ampel.anzeige.plist
 code/tests/test_install.sh
 ```
 
-Für das Limit-Feld fragt die App den Konto-Endpunkt von Anthropic ab. Das
-funktioniert nur mit einem Claude-Code-Abo, dessen Zugang im Schlüsselbund
-liegt. Ohne das bleibt das Feld leer, alles andere läuft normal weiter.
+Die Prüfung meldet am Ende `INSTALLATION GRUEN`, wenn Hook, Verknüpfung,
+Autostart und laufende App stimmen.
+
+### Zum Limit-Feld
+
+Das dunkle Feld links zeigt die Nutzungslimits des Abos. Dafür fragt die App den
+Konto-Endpunkt von Anthropic ab und liest den Zugang dafür zur Laufzeit aus dem
+macOS-Schlüsselbund. Ohne Claude-Code-Abo bleibt das Feld leer, alles andere
+funktioniert normal weiter.
+
+### Wieder loswerden
+
+```bash
+launchctl bootout "gui/$UID/de.session-ampel.anzeige"
+rm ~/Library/LaunchAgents/de.session-ampel.anzeige.plist
+rm ~/.claude/hooks/session-ampel.py
+rm -rf ~/.claude/session-ampel
+```
+
+Dazu die Einträge aus `~/.claude/settings.json` wieder entfernen. Der letzte
+Befehl löscht auch das Projektbuch mit den gesammelten Verbrauchszahlen.
 
 ## Bauen und Testen
 
@@ -180,7 +236,6 @@ code/tests/test_ampel.sh
 code/tests/test_install.sh
 ```
 
-Voraussetzungen: macOS mit Swift-Toolchain (Xcode Command Line Tools), Python 3.
 
 ## Hinweis zu den Kosten
 
