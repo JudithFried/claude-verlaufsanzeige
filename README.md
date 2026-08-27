@@ -83,6 +83,93 @@ SessionAmpel --ruht <id>       # Ruht-Markierung umschalten
 SessionAmpel --focus <id>      # Terminalfenster der Session nach vorn holen
 ```
 
+## Installation
+
+Das Ganze ist ein Einzelstück ohne Installationsprogramm, vier Handgriffe:
+
+**1. Holen und bauen**
+
+```bash
+git clone https://github.com/JudithFried/claude-verlaufsanzeige.git
+cd claude-verlaufsanzeige
+mkdir -p code/build
+swiftc -O -o code/build/SessionAmpel code/SessionAmpel.swift
+```
+
+**2. Hook verknüpfen**
+
+```bash
+mkdir -p ~/.claude/hooks
+ln -s "$PWD/code/ampel_hook.py" ~/.claude/hooks/session-ampel.py
+```
+
+**3. Hooks eintragen**
+
+Vorher eine Sicherungskopie anlegen, in `~/.claude/settings.json` stehen
+womöglich schon eigene Hooks. Die dürfen nicht verlorengehen, der neue Eintrag
+kommt zu den vorhandenen dazu:
+
+```bash
+cp ~/.claude/settings.json ~/.claude/settings.json.sicherung
+```
+
+Für jedes der sechs Ereignisse `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
+`Notification`, `Stop` und `SessionEnd` einen Eintrag nach diesem Muster
+ergänzen:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "python3 ~/.claude/hooks/session-ampel.py" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**4. Autostart einrichten**
+
+`~/Library/LaunchAgents/de.session-ampel.anzeige.plist` anlegen, den Pfad zum
+gebauten Programm eintragen:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>de.session-ampel.anzeige</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/PFAD/ZUM/PROJEKT/code/build/SessionAmpel</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+</dict>
+</plist>
+```
+
+Anmelden und prüfen:
+
+```bash
+launchctl bootstrap "gui/$UID" ~/Library/LaunchAgents/de.session-ampel.anzeige.plist
+code/tests/test_install.sh
+```
+
+Für das Limit-Feld fragt die App den Konto-Endpunkt von Anthropic ab. Das
+funktioniert nur mit einem Claude-Code-Abo, dessen Zugang im Schlüsselbund
+liegt. Ohne das bleibt das Feld leer, alles andere läuft normal weiter.
+
 ## Bauen und Testen
 
 ```bash
@@ -100,3 +187,7 @@ Voraussetzungen: macOS mit Swift-Toolchain (Xcode Command Line Tools), Python 3.
 Der angezeigte Betrag ist hypothetisch. Er rechnet den Verbrauch zu
 API-Listenpreisen um, obwohl die Nutzung über ein Abo läuft. Er dient dem
 Größenvergleich zwischen Sessions und Projekten, nicht der Abrechnung.
+
+## Lizenz
+
+MIT, siehe [LICENSE](LICENSE).
